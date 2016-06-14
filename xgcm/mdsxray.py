@@ -324,8 +324,17 @@ def _parse_meta(fname):
         assert flds['nrecords'] == len(flds['fldList'])
     return flds
 
+def _parse_meta(fname, llc=False, dataprec='float32'):
+    """Infer the metadata from an MITgcm .data file."""
+    if not llc:
+        raise ValueError("Can only infer metadata for llc geometry")
+    # figure out what the shape should be based on the file size
+
+
+
 def _read_mds(fname, iternum=None, use_mmap=True,
-             force_dict=True, convert_big_endian=False):
+             force_dict=True, convert_big_endian=False,
+             llc=False, default_dataprec='float32'):
     """Read an MITgcm .meta / .data file pair"""
 
     if iternum is None:
@@ -337,7 +346,11 @@ def _read_mds(fname, iternum=None, use_mmap=True,
     metafile = fname + istr + '.meta'
 
     # get metadata
-    meta = _parse_meta(metafile)
+    try:
+        meta = _parse_meta(metafile)
+    except IOError:
+        # couldn't find a meta file
+        meta = _guess_meta(datafile, llc=llc, dataprec=default_dataprec)
     # why does the .meta file contain so much repeated info?
     # just get the part we need
     # and reverse order (numpy uses C order, mds is fortran)
@@ -356,7 +369,10 @@ def _read_mds(fname, iternum=None, use_mmap=True,
         dtnew = d.dtype.newbyteorder('=')
         d = d.astype(dtnew)
 
-    d.shape = shape
+    if llc:
+        d = _reshape_llc_data(d, shape)
+    else;
+        d.shape = shape
 
     if nrecs == 1:
         if 'fldList' in meta:
@@ -373,6 +389,9 @@ def _read_mds(fname, iternum=None, use_mmap=True,
         for n, name in enumerate(meta['fldList']):
             out[name] = d[n]
         return out
+
+def _reshape_llc_data(data, shape):
+    """Reshape a raw data file into tiles associated with the LLC geometry."""
 
 
 class MDSArrayWrapper(xray.core.utils.NDArrayMixin):
